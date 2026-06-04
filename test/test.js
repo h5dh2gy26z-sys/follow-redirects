@@ -177,6 +177,171 @@ describe("follow-redirects", function () {
       });
   });
 
+  it("http.get to IPv4 address", function () {
+    app.get("/a", redirectsTo("/b"));
+    app.get("/b", redirectsTo("/c"));
+    app.get("/c", redirectsTo("/d"));
+    app.get("/d", redirectsTo("/e"));
+    app.get("/e", redirectsTo("/f"));
+    app.get("/f", sendsJson({ a: "b" }));
+
+    return server.start(app)
+      .then(asPromise(function (resolve, reject) {
+        http.get("http://127.0.0.1:3600/a", concatJson(resolve, reject)).on("error", reject);
+      }))
+      .then(function (res) {
+        assert.deepEqual(res.parsedJson, { a: "b" });
+        assert.deepEqual(res.responseUrl, "http://127.0.0.1:3600/f");
+      });
+  });
+
+  it("http.get to IPv6 address", function () {
+    app.get("/a", redirectsTo("/b"));
+    app.get("/b", redirectsTo("/c"));
+    app.get("/c", redirectsTo("/d"));
+    app.get("/d", redirectsTo("/e"));
+    app.get("/e", redirectsTo("/f"));
+    app.get("/f", sendsJson({ a: "b" }));
+
+    return server.start(app)
+      .then(asPromise(function (resolve, reject) {
+        http.get("http://[::1]:3600/a", concatJson(resolve, reject)).on("error", reject);
+      }))
+      .then(function (res) {
+        assert.deepEqual(res.parsedJson, { a: "b" });
+        assert.deepEqual(res.responseUrl, "http://[::1]:3600/f");
+      });
+  });
+
+  it("http.get to bracketed IPv4 address", function () {
+    var error = null;
+    try {
+      http.get("http://[127.0.0.1]:3600/a");
+    }
+    catch (err) {
+      error = err;
+    }
+    assert(error instanceof Error);
+    assert(error instanceof TypeError);
+    assert.equal(error.code, "ERR_INVALID_URL");
+    assert.equal(error.input, "http://[127.0.0.1]:3600/a");
+  });
+
+  it("http.get to bracketed IPv4 address specified as host", function () {
+    var error = null;
+    try {
+      http.get({
+        host: "[127.0.0.1]:3600",
+        path: "/a",
+      });
+    }
+    catch (err) {
+      error = err;
+    }
+    assert(error instanceof Error);
+    assert(error instanceof TypeError);
+    assert.equal(error.code, "ERR_INVALID_URL");
+  });
+
+  it("http.get to bracketed IPv4 address specified as hostname", function () {
+    var error = null;
+    try {
+      http.get({
+        hostname: "[127.0.0.1]",
+        port: 3600,
+        path: "/a",
+      });
+    }
+    catch (err) {
+      error = err;
+    }
+    assert(error instanceof Error);
+    assert(error instanceof TypeError);
+    assert.equal(error.code, "ERR_INVALID_URL");
+  });
+
+  it("http.get to bracketed hostname", function () {
+    var error = null;
+    try {
+      http.get("http://[localhost]:3600/a");
+    }
+    catch (err) {
+      error = err;
+    }
+    assert(error instanceof Error);
+    assert(error instanceof TypeError);
+    assert.equal(error.code, "ERR_INVALID_URL");
+    assert.equal(error.input, "http://[localhost]:3600/a");
+  });
+
+  it("http.get redirecting to IPv4 address", function () {
+    app.get("/a", redirectsTo("http://127.0.0.1:3600/b"));
+    app.get("/b", sendsJson({ a: "b" }));
+
+    return server.start(app)
+      .then(asPromise(function (resolve, reject) {
+        http.get("http://localhost:3600/a", concatJson(resolve, reject)).on("error", reject);
+      }))
+      .then(function (res) {
+        assert.deepEqual(res.parsedJson, { a: "b" });
+        assert.deepEqual(res.responseUrl, "http://127.0.0.1:3600/b");
+      });
+  });
+
+  it("http.get redirecting to IPv6 address", function () {
+    app.get("/a", redirectsTo("http://[::1]:3600/b"));
+    app.get("/b", sendsJson({ a: "b" }));
+
+    return server.start(app)
+      .then(asPromise(function (resolve, reject) {
+        http.get("http://localhost:3600/a", concatJson(resolve, reject)).on("error", reject);
+      }))
+      .then(function (res) {
+        assert.deepEqual(res.parsedJson, { a: "b" });
+        assert.deepEqual(res.responseUrl, "http://[::1]:3600/b");
+      });
+  });
+
+  it("http.get redirecting to bracketed IPv4 address", function () {
+    app.get("/a", redirectsTo("http://[127.0.0.1]:3600/b"));
+    app.get("/b", sendsJson({ a: "b" }));
+
+    return server.start(app)
+      .then(asPromise(function (resolve, reject) {
+        http.get("http://localhost:3600/a", concatJson(reject)).on("error", resolve);
+      }))
+      .then(function (error) {
+        assert(error instanceof Error);
+        assert.equal(error.code, "ERR_FR_REDIRECTION_FAILURE");
+
+        var cause = error.cause;
+        assert(cause instanceof Error);
+        assert(cause instanceof TypeError);
+        assert.equal(cause.code, "ERR_INVALID_URL");
+        assert.equal(cause.input, "http://[127.0.0.1]:3600/b");
+      });
+  });
+
+  it("http.get redirecting to bracketed hostname", function () {
+    app.get("/a", redirectsTo("http://[localhost]:3600/b"));
+    app.get("/b", sendsJson({ a: "b" }));
+
+    return server.start(app)
+      .then(asPromise(function (resolve, reject) {
+        http.get("http://localhost:3600/a", concatJson(reject)).on("error", resolve);
+      }))
+      .then(function (error) {
+        assert(error instanceof Error);
+        assert.equal(error.code, "ERR_FR_REDIRECTION_FAILURE");
+
+        var cause = error.cause;
+        assert(cause instanceof Error);
+        assert(cause instanceof TypeError);
+        assert.equal(cause.code, "ERR_INVALID_URL");
+        assert.equal(cause.input, "http://[localhost]:3600/b");
+      });
+  });
+
   it("http.get with response event", function () {
     app.get("/a", redirectsTo("/b"));
     app.get("/b", redirectsTo("/c"));
@@ -202,13 +367,31 @@ describe("follow-redirects", function () {
     try {
       http.get("/relative");
     }
-    catch (e) {
-      error = e;
+    catch (err) {
+      error = err;
     }
     assert(error instanceof Error);
     assert(error instanceof TypeError);
     assert.equal(error.code, "ERR_INVALID_URL");
     assert.equal(error.input, "/relative");
+  });
+
+  it("redirect to URL with fragment", function () {
+    app.get("/a", redirectsTo("/b#abc"));
+    app.get("/b", redirectsTo("/c#def"));
+    app.get("/c", redirectsTo("/d#ghi"));
+    app.get("/d", redirectsTo("/e#jkl"));
+    app.get("/e", redirectsTo("/f#mno"));
+    app.get("/f", sendsJson({ a: "b" }));
+
+    return server.start(app)
+      .then(asPromise(function (resolve, reject) {
+        http.get("http://localhost:3600/a", concatJson(resolve, reject)).on("error", reject);
+      }))
+      .then(function (res) {
+        assert.deepEqual(res.parsedJson, { a: "b" });
+        assert.deepEqual(res.responseUrl, "http://localhost:3600/f#mno");
+      });
   });
 
   it("should return with the original status code if the response does not contain a location header", function () {
@@ -300,7 +483,7 @@ describe("follow-redirects", function () {
         switch (error.cause.code) {
         // Node 17+
         case "ERR_INVALID_URL":
-          assert.equal(error.message, "Redirected request failed: Invalid URL");
+          assert(/^Redirected request failed: Invalid URL/.test(error.message));
           break;
         // Older Node versions
         case "ERR_UNESCAPED_CHARACTERS":
@@ -309,23 +492,6 @@ describe("follow-redirects", function () {
         default:
           throw new Error("Unexpected error code " + error.code);
         }
-      });
-  });
-
-  it("emits an error when url.resolve fails", function () {
-    app.get("/a", redirectsTo("/b"));
-    var urlResolve = url.resolve;
-    url.resolve = function () {
-      throw new Error();
-    };
-
-    return server.start(app)
-      .then(asPromise(function (resolve) {
-        http.get("http://localhost:3600/a").on("error", resolve);
-      }))
-      .then(function (error) {
-        url.resolve = urlResolve;
-        assert.equal(error.code, "ERR_FR_REDIRECTION_FAILURE");
       });
   });
 
@@ -441,7 +607,9 @@ describe("follow-redirects", function () {
 
       return server.start(app)
         .then(asPromise(function (resolve, reject) {
-          var req = http.get("http://localhost:3600/data", concatJson(reject, reject));
+          var opts = url.parse("http://localhost:3600/data");
+          opts.agent = new http.Agent({ keepAlive: false });
+          var req = http.get(opts, concatJson(reject, reject));
           req.on("error", reject);
           req.setTimeout(100, function () {
             throw new Error("should not have timed out");
@@ -916,12 +1084,16 @@ describe("follow-redirects", function () {
         .then(asPromise(function (resolve, reject) {
           http.get("http://localhost:3600/a")
             .on("response", function () { return reject(new Error("unexpected response")); })
-            .on("error", reject);
+            .on("error", resolve);
         }))
-        .catch(function (error) {
+        .then(function (error) {
           assert(error instanceof Error);
-          assert(error instanceof TypeError);
-          assert.equal(error.message, "Unsupported protocol about:");
+          assert.equal(error.message, "Redirected request failed: Unsupported protocol about:");
+
+          var cause = error.cause;
+          assert(cause instanceof Error);
+          assert(cause instanceof TypeError);
+          assert.equal(cause.message, "Unsupported protocol about:");
         });
     });
   });
@@ -1215,8 +1387,8 @@ describe("follow-redirects", function () {
       try {
         req.write(12345678);
       }
-      catch (e) {
-        error = e;
+      catch (err) {
+        error = err;
       }
       req.destroy();
       assert(error instanceof Error);
@@ -1359,8 +1531,19 @@ describe("follow-redirects", function () {
 
   [
     "Authorization",
+    "Proxy-Authorization",
     "Cookie",
+    "Sensitive-A",
+    "sensitive-a",
+    "SENSITIVE-A",
+    "X-Sensitive-B",
+    "x-sensitive-b",
   ].forEach(function (header) {
+    var sensitiveHeaders = [
+      "Sensitive-A",
+      "x-sensitive-b",
+    ];
+
     describe("when the client passes an header named " + header, function () {
       it("ignores it when null", function () {
         app.get("/a", redirectsTo(302, "http://localhost:3600/b"));
@@ -1371,6 +1554,7 @@ describe("follow-redirects", function () {
         var opts = url.parse("http://127.0.0.1:3600/a");
         opts.headers = { host: "localhost" };
         opts.headers[header] = null;
+        opts.sensitiveHeaders = sensitiveHeaders;
 
         return server.start(app)
           .then(asPromise(function (resolve, reject) {
@@ -1395,6 +1579,7 @@ describe("follow-redirects", function () {
         var opts = url.parse("http://localhost:3600/a");
         opts.headers = {};
         opts.headers[header] = "the header value";
+        opts.sensitiveHeaders = sensitiveHeaders;
 
         return server.start(app)
           .then(asPromise(function (resolve, reject) {
@@ -1419,6 +1604,7 @@ describe("follow-redirects", function () {
         var opts = url.parse("http://127.0.0.1:3600/a");
         opts.headers = { host: "localhost:3600" };
         opts.headers[header] = "the header value";
+        opts.sensitiveHeaders = sensitiveHeaders;
 
         return server.start(app)
           .then(asPromise(function (resolve, reject) {
@@ -1443,6 +1629,7 @@ describe("follow-redirects", function () {
         var opts = url.parse("http://127.0.0.1:3600/a");
         opts.headers = { host: "localhost:3600" };
         opts.headers[header] = "the header value";
+        opts.sensitiveHeaders = sensitiveHeaders;
 
         return server.start(app)
           .then(asPromise(function (resolve, reject) {
@@ -1467,6 +1654,7 @@ describe("follow-redirects", function () {
         var opts = url.parse("http://localhost:3600/a");
         opts.headers = {};
         opts.headers[header] = "the header value";
+        opts.sensitiveHeaders = sensitiveHeaders;
 
         // Intercept the hostname, as no DNS entry is defined for it
         opts.beforeRedirect = function (options) {
@@ -1497,6 +1685,7 @@ describe("follow-redirects", function () {
         var opts = url.parse("http://127.0.0.1:3600/a");
         opts.headers = { host: "localhost" };
         opts.headers[header] = "the header value";
+        opts.sensitiveHeaders = sensitiveHeaders;
 
         return server.start(app)
           .then(asPromise(function (resolve, reject) {
@@ -1521,6 +1710,7 @@ describe("follow-redirects", function () {
         var opts = url.parse("http://localhost:3600/a");
         opts.headers = {};
         opts.headers[header] = "the header value";
+        opts.sensitiveHeaders = sensitiveHeaders;
 
         return server.start(app)
           .then(asPromise(function (resolve, reject) {
@@ -1545,6 +1735,7 @@ describe("follow-redirects", function () {
         var opts = url.parse("http://127.0.0.1:3600/a");
         opts.headers = { host: "localhost" };
         opts.headers[header] = "the header value";
+        opts.sensitiveHeaders = sensitiveHeaders;
 
         return server.start(app)
           .then(asPromise(function (resolve, reject) {
@@ -1600,6 +1791,7 @@ describe("follow-redirects", function () {
       opts.ca = ca;
       opts.headers = {};
       opts.headers[header] = "the header value";
+      opts.sensitiveHeaders = sensitiveHeaders;
 
       // Intercept the scheme
       opts.beforeRedirect = function (options) {
@@ -1619,7 +1811,9 @@ describe("follow-redirects", function () {
           assert.equal(body[header.toLowerCase()], undefined);
         });
     });
+  });
 
+  describe("when a beforeRedirect callback is supplied", function () {
     it("passes the redirect status code to beforeRedirect", function () {
       app.get("/a", redirectsTo("/b"));
       app.get("/b", redirectsTo("/c", 301));
@@ -2081,15 +2275,14 @@ describe("follow-redirects", function () {
               throw new Error("no redirects!");
             },
           };
-          http.get(options, concatJson(resolve, reject)).on("error", reject);
+          http.get(options, concatJson(reject)).on("error", resolve);
         }))
-        .then(function () {
-          assert.fail("request chain should have been aborted");
-        })
-        .catch(function (error) {
+        .then(function (error) {
           assert(!redirected);
           assert(error instanceof Error);
-          assert.equal(error.message, "no redirects!");
+          assert.equal(error.message, "Redirected request failed: no redirects!");
+          assert(error.cause instanceof Error);
+          assert.equal(error.cause.message, "no redirects!");
         });
     });
 
